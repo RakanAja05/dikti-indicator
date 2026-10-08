@@ -16,17 +16,103 @@ export type QwenMessage = {
   content: string;
 };
 
-export type SpreadsheetToolResult =
+// ===== Tool Request & Result Types =====
+
+// Valid indicators berdasarkan dashboard-config.ts
+export type IndicatorCode = "IKU 001" | "IKU 002" | "IKU 003" | "IKU 005" | "IKU 007" | "IKU 009";
+
+// Valid aggregation methods
+export type AggregationMethod = "none" | "sum" | "count" | "avg";
+
+// Map indicator ke canonical keys (kolom valid per indicator)
+export const indicatorValidColumns: Record<IndicatorCode, string[]> = {
+  "IKU 001": ["total_lecturers", "year", "faculty", "study_program", "degree"],
+  "IKU 002": ["year", "faculty", "study_program", "degree"],
+  "IKU 003": ["iku_017", "iku_018", "coaching_achievement", "iku_total", "iku_percentage", "year", "faculty", "study_program", "degree"],
+  "IKU 005": ["total_lecturers", "iku_017", "iku_018", "coaching_achievement", "iku_total", "iku_percentage", "year", "faculty", "study_program", "degree"],
+  "IKU 007": ["total_lecturers", "iku_017", "iku_018", "coaching_achievement", "iku_total", "iku_percentage", "year", "faculty", "study_program", "degree"],
+  "IKU 009": ["total_lecturers", "iku_017", "iku_018", "coaching_achievement", "iku_total", "iku_percentage", "year", "faculty", "study_program", "degree"],
+};
+
+// ToolRequest dari LLM untuk fetch data
+export type ToolRequest =
+  | {
+      action: "fetch_data";
+      indicator: IndicatorCode;
+      year?: string | null;
+      faculty?: string | null;
+      degree?: string | null;
+      aggregation?: AggregationMethod;
+      column?: string | null;
+    };
+
+// ToolResult dari eksekusi data layer
+export type ToolResult =
   | {
       status: "ok";
       source: { id: string; name: string };
-      columns: string[];
-      rows: Record<string, unknown>[];
+      indicator: IndicatorCode;
+      filters: { year?: string; faculty?: string; degree?: string };
+      aggregation?: AggregationMethod;
+      matchedRows: number;
+      totalRows: number;
       truncated: boolean;
+      summary?: {
+        totalStudyProgram: number;
+        totalFaculty: number;
+        totalLecturers: number;
+        totalIkuQualified: number;
+        avgIkuPercentage: number;
+        totalPartners: number;
+      };
+      data?: {
+        rows: Record<string, unknown>[];
+      } | {
+        value: number;
+        column: string;
+      };
     }
-  | { status: "no_source"; message: string }
-  | { status: "error"; message: string };
+  | {
+      status: "no_source";
+      message: string;
+    }
+  | {
+      status: "no_match";
+      message: string;
+      availableFilters: {
+        years?: string[];
+        faculties?: string[];
+        degrees?: string[];
+      };
+    }
+  | {
+      status: "error";
+      message: string;
+    };
 
+// Parsed response dari LLM
 export type ParsedQwenResponse =
   | { type: "answer"; content: string }
-  | { type: "needsData"; query: string };
+  | { type: "tool_request"; request: ToolRequest };
+
+// Error types untuk LLM client
+export class LlmTimeoutError extends Error {
+  constructor(message?: string) {
+    super(message ?? "LLM request timed out");
+    this.name = "LlmTimeoutError";
+  }
+}
+
+export class LlmUnavailableError extends Error {
+  constructor(message?: string) {
+    super(message ?? "LLM service unavailable");
+    this.name = "LlmUnavailableError";
+  }
+}
+
+export class LlmBadResponseError extends Error {
+  constructor(message?: string) {
+    super(message ?? "LLM returned invalid response");
+    this.name = "LlmBadResponseError";
+  }
+}
