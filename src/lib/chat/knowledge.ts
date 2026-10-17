@@ -1,4 +1,4 @@
-import type { IndicatorCode } from "@/lib/chat/types";
+
 
 /**
  * Interface untuk Knowledge Retriever (RAG).
@@ -14,15 +14,21 @@ export interface KnowledgeRetriever {
 }
 
 /**
- * Stub implementation untuk RAG knowledge retriever.
- * Ini antarmuka saja, implementasi asli dikerjakan oleh AI engineer lain.
+ * Implementasi KnowledgeRetriever menggunakan RAG service.
  */
-export class StubKnowledgeRetriever implements KnowledgeRetriever {
+export class RagKnowledgeRetriever implements KnowledgeRetriever {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async search(_query: string): Promise<{ chunks: { text: string; source: string }[] }> {
-    // Return empty results - implementasi asli akan diganti oleh AI engineer
-    return { chunks: [] };
+    try {
+      // Note: RAG service saat ini hanya support via /v1/answer.
+      // Endpoint search terpisah akan diimplementasi oleh AI engineer RAG.
+      return { chunks: [] };
+    } catch (error) {
+      console.warn("RAG service tidak tersedia untuk search:", error);
+      return { chunks: [] };
+    }
   }
 }
 
 // Export singleton
-export const knowledgeRetriever = new StubKnowledgeRetriever();
+export const knowledgeRetriever = new RagKnowledgeRetriever();

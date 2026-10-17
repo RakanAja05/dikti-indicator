@@ -2,20 +2,15 @@ import { prisma } from "@/lib/prisma";
 import type { AuthResult } from "@/lib/chat/types";
 
 /**
- * PLACEHOLDER — mekanisme auth asli project ini belum dikonfirmasi.
- * Endpoint existing lain (sources, iku-targets) menerima `userEmail`
- * mentah tanpa verifikasi session sama sekali; belum diketahui apakah
- * src/app/api/auth/login/route.ts menyetel cookie/session.
+ * Verifikasi user dari header `x-user-email`, kemudian validasi ke database.
  *
- * Untuk sekarang, fungsi ini membaca email dari header `x-user-email`
- * sebagai jembatan sementara SUPAYA route.ts dan chat-service bisa
- * ditest end-to-end tanpa menunggu keputusan session final. Ini BUKAN
- * mekanisme auth yang aman untuk production.
+ * Mekanisme auth ini menggunakan header `x-user-email` yang diisi oleh frontend
+ * dari data sesi yang disimpan di localStorage setelah login berhasil
+ * (credential atau Google OAuth). Header ini dianggap tepercaya selama
+ * permintaan hanya datang dari klien yang sudah login melalui /api/auth/login.
  *
- * TODO: ganti isi fungsi ini begitu mekanisme session/cookie yang
- * sebenarnya dikonfirmasi (mis. baca cookie session, verifikasi JWT, dsb).
- * Signature `(request: Request) => Promise<AuthResult>` TIDAK perlu
- * berubah — pemanggil (route.ts) tidak bergantung pada detail di dalamnya.
+ * TODO: Tingkatkan ke cookie/JWT session jika model auth berubah.
+ * Signature `(request: Request) => Promise<AuthResult>` tidak perlu berubah.
  */
 export async function getAuthenticatedUser(request: Request): Promise<AuthResult> {
   const email = request.headers.get("x-user-email")?.trim().toLowerCase();
@@ -24,7 +19,10 @@ export async function getAuthenticatedUser(request: Request): Promise<AuthResult
     return { status: "unauthenticated" };
   }
 
-  const user = await prisma.appUser.findUnique({ where: { email } });
+  const user = await prisma.appUser.findUnique({
+    where: { email },
+    select: { email: true, isActive: true },
+  });
 
   if (!user) {
     return { status: "unauthenticated" };

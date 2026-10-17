@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { parseSpreadsheetUrl } from "@/lib/spreadsheet-parser";
-import { calculateKpis, filterRows, generateProfile, normalizeRows } from "@/lib/data-helpers";
-import type { AuthContext, ToolRequest, ToolResult, IndicatorCode, AggregationMethod } from "@/lib/chat/types";
-import type { NormalizedRow, RawRow, CanonicalKey } from "@/types/data";
+import { calculateKpis, filterRows, normalizeRows } from "@/lib/data-helpers";
+import type { AuthContext, ToolRequest, ToolResult } from "@/lib/chat/types";
+import type { RawRow, CanonicalKey } from "@/types/data";
 
 const MAX_ROWS = 200;
 
@@ -72,7 +72,6 @@ export async function executeTool(
     };
   }
 
-  const sourceId = tabConnection?.sourceId || connections[0]?.id || "";
   const connection = tabConnection
     ? connections.find((c) => c.id === tabConnection.sourceId)
     : connections[0];
@@ -85,7 +84,7 @@ export async function executeTool(
   }
 
   try {
-    const { rows, columns } = await parseSpreadsheetUrl(connection.url);
+    const { rows } = await parseSpreadsheetUrl(connection.url);
     const totalRows = rows.length;
 
     if (totalRows === 0) {

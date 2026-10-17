@@ -1,6 +1,6 @@
 // Shared types untuk fitur chat.
-// File ini sengaja terpisah karena dipakai bersama oleh route.ts,
-// chat-service.ts, qwen-client.ts, auth-context.ts, dan spreadsheet-tool.ts.
+// File ini dipakai bersama oleh route.ts, chat-service-rag.ts,
+// rag-client.ts, auth-context.ts, dan spreadsheet-tool.ts.
 
 export type AuthContext = {
   email: string;
@@ -94,6 +94,23 @@ export type ToolResult =
 export type ParsedQwenResponse =
   | { type: "answer"; content: string }
   | { type: "tool_request"; request: ToolRequest };
+
+// ===== ChatAnswer type (dari RAG service) =====
+export type ChatAnswer = {
+  answer: string;
+  citations: Array<{
+    id: string;
+    documentTitle: string;
+    documentVersion?: string;
+    section?: string;
+    page?: number;
+    ikuCode?: string;
+    snippet?: string;
+  }>;
+  grounded: boolean;
+  outOfScope: { suggestedTab?: string } | null;
+  action: { type: string; payload?: unknown } | null;
+};
 
 // Error types untuk LLM client
 export class LlmTimeoutError extends Error {
