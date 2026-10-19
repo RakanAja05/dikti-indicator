@@ -122,10 +122,10 @@ export async function executeTool(
     let data: { rows: RawRow[] } | { value: number; column: string } = { rows: [], column: "" as const };
     let summary = calculateKpis(filteredRows);
 
-    if (aggregation === "none") {
-      // Return max 200 rows mentah (before normalization for LLM)
-      const rowsToShow = rows.slice(0, MAX_ROWS) as RawRow[];
-      const truncated = totalRows > MAX_ROWS;
+if (aggregation === "none") {
+      // Return max 200 rows dari hasil filter
+      const rowsToShow = filteredRows.slice(0, MAX_ROWS).map((r) => r.__raw as RawRow);
+      const truncated = matchedRows > MAX_ROWS;
       data = { rows: rowsToShow };
       if (truncated) {
         summary = { ...summary, totalStudyProgram: summary.totalStudyProgram };

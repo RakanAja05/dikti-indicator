@@ -36,20 +36,25 @@ export async function handleChatMessage(
   const needsData = ragResponse.action?.type === "fetch_data";
 
   if (needsData) {
-    // 3. Butuh data spreadsheet
+      // 3. Butuh data spreadsheet
 
-    // Ambil indicator dari scope, validasi sebagai IndicatorCode
-    const VALID_INDICATOR_CODES = ["IKU 001", "IKU 002", "IKU 003", "IKU 005", "IKU 007", "IKU 009"] as const;
-    type IndicatorCode = typeof VALID_INDICATOR_CODES[number];
-    const rawIndicator = scope?.ikuCode || "IKU 001";
-    const indicator: IndicatorCode = (VALID_INDICATOR_CODES as readonly string[]).includes(rawIndicator)
-      ? (rawIndicator as IndicatorCode)
-      : "IKU 001";
+      // Ambil indicator dari scope, validasi sebagai IndicatorCode
+      const VALID_INDICATOR_CODES = ["IKU 001", "IKU 002", "IKU 003", "IKU 005", "IKU 007", "IKU 009"] as const;
+      type IndicatorCode = typeof VALID_INDICATOR_CODES[number];
+      const rawIndicator = scope?.ikuCode || "IKU 001";
+      const indicator: IndicatorCode = (VALID_INDICATOR_CODES as readonly string[]).includes(rawIndicator)
+        ? (rawIndicator as IndicatorCode)
+        : "IKU 001";
+
+    // Deteksi tahun dari pertanyaan user (misal 2024, 2025, 2026).
+    // Jika user tidak menyebut tahun, gunakan null agar semua tahun terambil & direkap per tahun!
+    const yearMatch = trimmedMessage.match(/\b(202\d)\b/);
+    const requestedYear = yearMatch ? yearMatch[1] : null;
 
     const spreadsheetRequest = {
       action: "fetch_data" as const,
       indicator,
-      year: new Date().getFullYear().toString(),
+      year: requestedYear,
       faculty: null,
       degree: null,
       aggregation: "none" as const,
@@ -125,33 +130,40 @@ function formatToolResultForLLM(result: ToolResult): string {
   // Summary
   if (result.summary) {
     lines.push("Ringkasan Data:");
-    if (result.summary.totalStudyProgram) {
+    if (result.summary.totalStudyProgram !== undefined) {
       lines.push(`- Total Program Studi: ${result.summary.totalStudyProgram}`);
     }
-    if (result.summary.totalFaculty) {
+    if (result.summary.totalFaculty !== undefined) {
       lines.push(`- Total Fakultas: ${result.summary.totalFaculty}`);
     }
-    if (result.summary.avgIkuPercentage) {
+    if (result.summary.totalLecturers !== undefined) {
+      lines.push(`- Total Dosen: ${result.summary.totalLecturers}`);
+    }
+    if (result.summary.totalIkuQualified !== undefined) {
+      lines.push(`- Total Memenuhi IKU: ${result.summary.totalIkuQualified}`);
+    }
+    if (result.summary.avgIkuPercentage !== undefined) {
       lines.push(`- Rata-rata Capaian IKU: ${result.summary.avgIkuPercentage.toFixed(2)}%`);
+    }
+    if (result.summary.totalPartners !== undefined) {
+      lines.push(`- Total Mitra: ${result.summary.totalPartners}`);
     }
     lines.push("");
   }
 
   // Data
-  if (result.data && "rows" in result.data) {
-    lines.push(`Data Detail (${result.matchedRows} dari ${result.totalRows} baris):`);
+if (result.data && "rows" in result.data && result.data.rows.length > 0) {
+    const MAX_LLM_ROWS = 100;
+    const rows = result.data.rows.slice(0, MAX_LLM_ROWS);
+    const headers = Object.keys(rows[0]);
     
-    const rows = result.data.rows.slice(0, 10); // Max 10 rows untuk display
-    rows.forEach((row, idx) => {
-      const rowStr = Object.entries(row)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(", ");
-      lines.push(`  ${idx + 1}. ${rowStr}`);
+    lines.push(`Data Detail (${rows.length} dari ${result.matchedRows} baris):`);
+    lines.push(headers.join(" | "));
+    
+    rows.forEach((row) => {
+      const vals = headers.map((h) => String(row[h as keyof typeof row] ?? ""));
+      lines.push(vals.join(" | "));
     });
-    
-    if (result.data.rows.length > 10) {
-      lines.push(`  ... dan ${result.data.rows.length - 10} baris lagi`);
-    }
   } else if (result.data && "value" in result.data) {
     lines.push(`Hasil Agregasi (${result.data.column}): ${result.data.value}`);
   }
