@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/chat/auth-context";
 import { handleChatMessage } from "@/lib/chat/chat-service-rag";
+import type { ClientSpreadsheetData } from "@/lib/chat/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,9 +24,20 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       message?: string;
       scope?: { kind?: string; ikuCode?: string };
+      /**
+       * Data spreadsheet yang sudah di-parse di browser.
+       * Jika dikirim, server tidak perlu fetch ulang ke Google Sheets.
+       * Format: { rows: Record<string, unknown>[], columns: string[],
+       *           sourceName?: string, sourceId?: string }
+       */
+      clientData?: ClientSpreadsheetData;
     };
     const message = (body.message || "").trim();
     const scope = body.scope;
+
+    // Validasi minimal: rows harus array
+    const clientData: ClientSpreadsheetData | undefined =
+      Array.isArray(body.clientData?.rows) ? body.clientData : undefined;
 
     if (!message) {
       return NextResponse.json({ error: "message wajib diisi." }, { status: 400 });
@@ -36,7 +48,8 @@ export async function POST(request: Request) {
       message,
       (scope?.kind === "iku" || scope?.kind === "overview")
         ? { kind: scope.kind, ikuCode: scope.ikuCode }
-        : undefined
+        : undefined,
+      clientData
     );
 
     return NextResponse.json(result);
@@ -58,4 +71,4 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: "Gagal memproses chat." }, { status: 500 });
   }
-}
+}

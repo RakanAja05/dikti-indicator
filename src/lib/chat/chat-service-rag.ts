@@ -1,6 +1,7 @@
 import { executeTool } from "@/lib/chat/spreadsheet-tool";
 import type {
   AuthContext,
+  ClientSpreadsheetData,
   ToolResult,
   ChatAnswer,
 } from "@/lib/chat/types";
@@ -10,11 +11,16 @@ import { getRagClient } from "@/lib/chat/rag-client";
 
 /**
  * Handle chat menggunakan RAG service (IKU Chatbot).
+ *
+ * @param clientData - Data spreadsheet yang sudah di-parse di browser (opsional).
+ *   Jika dikirim, server tidak perlu fetch ke Google Sheets (menghindari EAI_AGAIN).
+ *   Jika tidak dikirim, server fallback ke fetch server-side.
  */
 export async function handleChatMessage(
   user: AuthContext,
   message: string,
-  scope?: { kind?: string; ikuCode?: string }
+  scope?: { kind?: string; ikuCode?: string },
+  clientData?: ClientSpreadsheetData
 ): Promise<ChatAnswer> {
   const MAX_MESSAGE_LENGTH = 2000;
   const trimmedMessage = message.trim();
@@ -28,26 +34,37 @@ export async function handleChatMessage(
     };
   }
 
+  console.log("[CHAT-DEBUG] 1. Incoming message:", trimmedMessage, "| Scope:", JSON.stringify(scope));
+
   // 1. RAG retrieval (selalu dilakukan untuk get intent + chunks)
   const ragClient = getRagClient();
   const ragResponse = await ragClient.answer(trimmedMessage, scope);
 
   // 2. Check RAG response: butuh data spreadsheet?
   const needsData = ragResponse.action?.type === "fetch_data";
+  console.log("[CHAT-DEBUG] 2. FastAPI Call 1 response:", JSON.stringify(ragResponse));
 
   if (needsData) {
-      // 3. Butuh data spreadsheet
+    // 3. Butuh data spreadsheet
+    const VALID_INDICATOR_CODES = ["IKU 001", "IKU 002", "IKU 003", "IKU 005", "IKU 007", "IKU 009"] as const;
+    type IndicatorCode = typeof VALID_INDICATOR_CODES[number];
 
-      // Ambil indicator dari scope, validasi sebagai IndicatorCode
-      const VALID_INDICATOR_CODES = ["IKU 001", "IKU 002", "IKU 003", "IKU 005", "IKU 007", "IKU 009"] as const;
-      type IndicatorCode = typeof VALID_INDICATOR_CODES[number];
-      const rawIndicator = scope?.ikuCode || "IKU 001";
-      const indicator: IndicatorCode = (VALID_INDICATOR_CODES as readonly string[]).includes(rawIndicator)
-        ? (rawIndicator as IndicatorCode)
-        : "IKU 001";
+    // Ekstrak nomor IKU dari pertanyaan user jika ada (misal "IKU 2" -> "IKU 002")
+    const ikuMatch = trimmedMessage.match(/iku[\s-]*0*(\d+)/i);
+    const extractedIku = ikuMatch ? `IKU ${ikuMatch[1].padStart(3, "0")}` : null;
+
+    // Normalisasi scope.ikuCode juga jika dikirim dalam format "IKU 2" -> "IKU 002"
+    const scopeIkuMatch = scope?.ikuCode?.match(/iku[\s-]*0*(\d+)/i);
+    const normalizedScopeIku = scopeIkuMatch ? `IKU ${scopeIkuMatch[1].padStart(3, "0")}` : scope?.ikuCode;
+
+    // Prioritaskan IKU yang disebut eksplisit di pertanyaan, lalu dari scope, terakhir default IKU 001
+    const candidateIndicator = extractedIku || normalizedScopeIku || "IKU 001";
+    const indicator: IndicatorCode = (VALID_INDICATOR_CODES as readonly string[]).includes(candidateIndicator)
+      ? (candidateIndicator as IndicatorCode)
+      : "IKU 001";
 
     // Deteksi tahun dari pertanyaan user (misal 2024, 2025, 2026).
-    // Jika user tidak menyebut tahun, gunakan null agar semua tahun terambil & direkap per tahun!
+    
     const yearMatch = trimmedMessage.match(/\b(202\d)\b/);
     const requestedYear = yearMatch ? yearMatch[1] : null;
 
@@ -61,27 +78,34 @@ export async function handleChatMessage(
       column: null,
     };
 
+    console.log("[CHAT-DEBUG] 3. Executing spreadsheet tool with request:", JSON.stringify(spreadsheetRequest));
 
     try {
-      const toolResult = await executeTool(user, spreadsheetRequest);
+      const toolResult = await executeTool(user, spreadsheetRequest, clientData);
+      console.log("[CHAT-DEBUG] 4. Tool Result status:", toolResult.status, "| message:", toolResult.message || "OK");
 
       if (toolResult.status === "ok") {
         // Format data untuk LLM-friendly
         const dataContext = formatToolResultForLLM(toolResult);
+        console.log("[CHAT-DEBUG] 5. Formatted dataContext length:", dataContext.length);
+        console.log("[CHAT-DEBUG] 5b. Formatted dataContext preview:\n", dataContext.slice(0, 500));
 
         // Kirim ulang ke RAG dengan question + spreadsheet_context
-        // LLM akan merangkum jawaban berdasarkan data kampus + konteks IKU
+
         try {
-          const ragClient = getRagClient();
+          // Pastikan scope juga membawa indicator yang benar ke Call 2
+          const updatedScope = { ...scope, ikuCode: indicator };
+          console.log("[CHAT-DEBUG] 6. Calling FastAPI Call 2 (answerWithSpreadsheet) with scope:", JSON.stringify(updatedScope));
+
           const secondResponse = await ragClient.answerWithSpreadsheet(
             trimmedMessage,
             dataContext,
-            scope
+            updatedScope
           );
+          console.log("[CHAT-DEBUG] 7. FastAPI Call 2 success!");
           return secondResponse;
         } catch (secondCallError) {
-          // Fallback: return data mentah jika second call gagal
-          console.error("Second RAG call failed, returning raw data:", secondCallError);
+          console.error("[CHAT-DEBUG] ❌ Second RAG call failed, returning raw data:", secondCallError);
           return {
             answer: `Berikut data ${indicator} kampus Anda:\n\n${dataContext}`,
             citations: ragResponse.citations,
@@ -91,7 +115,7 @@ export async function handleChatMessage(
           };
         }
       } else {
-        // Tool failed
+        console.warn("[CHAT-DEBUG] ⚠️ Tool returned non-ok status:", toolResult);
         return {
           answer: `Gagal mengambil data: ${toolResult.message || "Tidak ada data tersedia"}`,
           citations: [],
@@ -101,7 +125,7 @@ export async function handleChatMessage(
         };
       }
     } catch (error) {
-      console.error("Error executing tool:", error);
+      console.error("[CHAT-DEBUG] ❌ Error executing tool:", error);
       return {
         answer: "Maaf, terjadi kesalahan saat mengambil data kampus.",
         citations: [],
@@ -112,6 +136,7 @@ export async function handleChatMessage(
     }
   } else {
     // 4. Tidak butuh data spreadsheet → return langsung dari RAG
+    console.log("[CHAT-DEBUG] 3. Intent bukan fetch_data, langsung return jawaban RAG.");
     return ragResponse;
   }
 }
