@@ -6,6 +6,22 @@ export type AuthContext = {
   email: string;
 };
 
+/**
+ * Data spreadsheet yang sudah di-parse di sisi client (browser).
+ * Dikirim bersamaan dengan chat request agar server tidak perlu
+ * fetch ulang ke Google Sheets (menghindari EAI_AGAIN di Node.js).
+ *
+ * Field ini opsional — jika tidak dikirim, server akan fallback ke
+ * fetch server-side (dengan dns.setDefaultResultOrder('ipv4first')).
+ */
+export type ClientSpreadsheetData = {
+  rows: Record<string, unknown>[];
+  columns: string[];
+  /** Nama/ID sumber data, untuk logging & ToolResult.source */
+  sourceName?: string;
+  sourceId?: string;
+};
+
 export type AuthResult =
   | { status: "ok"; user: AuthContext }
   | { status: "unauthenticated" }
