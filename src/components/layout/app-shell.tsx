@@ -43,6 +43,10 @@ import {
 } from "@carbon/icons-react";
 import { dashboardMenuItems } from "@/lib/dashboard-config";
 import { useDashboardStore } from "@/store/dashboard-store";
+import { useChatStore } from "@/store/chat-store";
+import { DEMO_MODE, ensureDemoSession } from "@/lib/demo-mode";
+import { ChatLauncher } from "@/components/chat/chat-launcher";
+import { ChatPanel } from "@/components/chat/chat-panel";
 import type { SheetConnection } from "@/lib/source-connection-types";
 
 const activityItems = [
@@ -84,6 +88,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; avatarUrl?: string } | null>(null);
+  const isChatOpen = useChatStore((state) => state.isOpen);
+  const isChatExpanded = useChatStore((state) => state.isExpanded);
   const {
     columns,
     activeFileName,
@@ -337,7 +343,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Protect routes and sync user session on mount/path change
   useEffect(() => {
-    const rawUser = localStorage.getItem("iku-user-session");
+    const rawUser = DEMO_MODE ? ensureDemoSession() : localStorage.getItem("iku-user-session");
     if (!rawUser) {
       router.push("/login");
     } else {
@@ -488,7 +494,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   else if (pathname === "/dashboard") activeActivity = "visual";
 
   const handleActivityClick = (id: string, href: string) => {
-    if (!hasSetTargets) {
+    if (!hasSetTargets && !DEMO_MODE) {
       setIsSettingsModalOpen(true);
       return;
     }
@@ -786,6 +792,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <HeaderGlobalBar>
+          <ChatLauncher />
           <div style={{ position: "relative", display: "flex", alignItems: "center", height: "100%" }} ref={profileMenuRef}>
             <HeaderGlobalAction
               aria-label="Menu profil pengguna"
@@ -912,7 +919,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </HeaderGlobalBar>
       </Header>
 
-      <Content className="app-content">
+      <Content
+        className={`app-content${isChatOpen ? " app-content--chat-open" : ""}${isChatExpanded ? " app-content--chat-expanded" : ""}`}
+      >
         <div className="app-content-body">
           <div className="dashboard-shell">
             <div className="dashboard-body">
@@ -1185,6 +1194,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </footer>
       </Content>
 
+      <ChatPanel />
+
       {/* ── Modal Box 1: Global Upload / Connect Dataset (IBM/CDS Design) ── */}
       <Modal
         open={isUploadModalOpen}
@@ -1375,7 +1386,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Modal Box 4: Settings Modal ── */}
       <Modal
-        open={isSettingsModalOpen || (areTargetsLoaded && !hasSetTargets)}
+        open={isSettingsModalOpen || (areTargetsLoaded && !hasSetTargets && !DEMO_MODE)}
         modalHeading="Pengaturan Target Kinerja Utama (IKU)"
         primaryButtonText="Simpan Perubahan"
         secondaryButtonText={hasSetTargets ? "Batal" : undefined}

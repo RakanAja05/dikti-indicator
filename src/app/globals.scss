@@ -28,6 +28,9 @@
 @use '@carbon/react/scss/spacing' as *;
 @use '@carbon/react/scss/utilities/convert' as *;
 
+// 7. Feature partials
+@use '../styles/chat-layout';
+
 // ============================================================
 // Dark mode: map html.dark → Carbon g100 theme
 // ============================================================
