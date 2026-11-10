@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ai documentation
+ai-integration-guide.md
+ai-slicing-guide.md
+
+# PRD
+PRD_*.md

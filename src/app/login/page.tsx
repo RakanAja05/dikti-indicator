@@ -13,6 +13,7 @@ import {
 import {
   ArrowRight
 } from "@carbon/icons-react";
+import { DEMO_MODE, ensureDemoSession } from "@/lib/demo-mode";
 
 function parseCookie(name: string): string | null {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -77,8 +78,8 @@ export default function LoginPage() {
 
   // Protect routes and sync user session on mount / OAuth callback
   useEffect(() => {
-    // 1. Check if already logged in
-    const rawUser = localStorage.getItem("iku-user-session");
+    // 1. Check if already logged in (mode demo: langsung buat sesi demo)
+    const rawUser = DEMO_MODE ? ensureDemoSession() : localStorage.getItem("iku-user-session");
     if (rawUser) {
       router.push("/dashboard");
       return;
@@ -116,8 +117,14 @@ export default function LoginPage() {
     }
   }, [router]);
 
-  const handleCredentialsLogin = async (e: React.FormEvent) => {
+  const handleCredentialsLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Baca langsung dari form: nilai autofill browser belum tentu masuk ke state React.
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+    setEmail(email);
+    setPassword(password);
     if (!email.trim() || !password.trim()) {
       setAuthError("Email dan password wajib diisi.");
       return;
@@ -343,6 +350,9 @@ export default function LoginPage() {
               <form onSubmit={handleCredentialsLogin} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                 <TextInput
                   id="auth-email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
                   labelText="Email Institusi"
                   placeholder="nama@univ.ac.id"
                   value={email}
@@ -352,6 +362,8 @@ export default function LoginPage() {
                 />
                 <PasswordInput
                   id="auth-password"
+                  name="password"
+                  autoComplete="current-password"
                   labelText="Kata Sandi"
                   placeholder="Masukkan sandi Anda"
                   value={password}
@@ -374,10 +386,10 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   renderIcon={ArrowRight}
-                  disabled={isLoading || isGoogleLoading || !email || !password}
+                  disabled={isLoading || isGoogleLoading}
                   style={{ width: "100%", marginTop: "0.5rem", borderRadius: 0, paddingRight: "1.5rem" }}
                 >
-                  Masuk Kredensial
+                  {isLoading ? "Memverifikasi…" : "Masuk Kredensial"}
                 </Button>
               </form>
 
